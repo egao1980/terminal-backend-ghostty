@@ -21,6 +21,11 @@
         (event (native terminal 2))
         (handle (ghostty-terminal-handle terminal)))
     (check (ffi:key-encoder-set-from-terminal encoder handle) :key-encoder terminal)
+    ;; :ALT means Alt on every platform; macOS's "Option composes" default
+    ;; would make the same event encode differently per OS.
+    (cffi:with-foreign-object (alt 'ffi:option-as-alt)
+      (setf (cffi:mem-ref alt 'ffi:option-as-alt) :true)
+      (check (ffi:key-encoder-set encoder :macos-option-as-alt alt) :option-as-alt terminal))
     (check (ffi:key-event-set-key event (key-enum key)) :key terminal)
     (check (ffi:key-event-set-action event action) :action terminal)
     (check (ffi:key-event-set-mods event (mods modifiers)) :mods terminal)
