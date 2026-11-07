@@ -157,3 +157,32 @@ pointer the handle is written through. → the handle."
                (prog1 (gv:foreign-utf8 p n)
                  (ffi:free (cffi:null-pointer) p n)))))
       (ffi:formatter-free formatter))))
+
+;;; Kitty graphics images
+
+(defmethod tp:terminal-image ((terminal ghostty-terminal) image-id)
+  (check-type image-id (integer 0 #xffffffff))
+  (let ((graphics (cffi:with-foreign-object (out :pointer)
+                    (check (ffi:terminal-get (ghostty-terminal-handle terminal)
+                                             :kitty-graphics out)
+                           :kitty-graphics terminal)
+                    (cffi:mem-ref out :pointer))))
+    (let ((image (ffi:kitty-graphics-image graphics image-id)))
+      (unless (cffi:null-pointer-p image)
+        (flet ((datum (key type)
+                 (cffi:with-foreign-object (out type)
+                   (check (ffi:kitty-graphics-image-get image key out) key terminal)
+                   (cffi:mem-ref out type))))
+          (cffi:with-foreign-object (pixels '(:struct ffi:string))
+            (check (ffi:kitty-graphics-image-get image :pixels pixels) :pixels terminal)
+            (cffi:with-foreign-slots ((ffi:ptr ffi:len) pixels (:struct ffi:string))
+              (let ((octets (make-array ffi:len :element-type '(unsigned-byte 8))))
+                (dotimes (i ffi:len)
+                  (setf (aref octets i) (cffi:mem-aref ffi:ptr :uint8 i)))
+                (tp:make-terminal-image
+                 :id image-id
+                 :width (datum :width :uint32)
+                 :height (datum :height :uint32)
+                 :format (let ((f (datum :format 'ffi:kitty-image-format)))
+                           (if (eq f :png) :rgba f))
+                 :pixels octets)))))))))

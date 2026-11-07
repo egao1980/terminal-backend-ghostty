@@ -4,7 +4,8 @@
   (:documentation "terminal-protocol backend on libghostty-vt."))
 
 (defparameter +features+
-  '(:scrollback :alternate-screen :kitty-keyboard :osc-52 :osc-133
+  '(:scrollback :alternate-screen :kitty-keyboard :kitty-graphics :kitty-zlib
+    :osc-52 :osc-133
     :format-vt :format-html))
 
 (defmethod tp:backend-supports-p ((backend ghostty-backend) feature)
