@@ -140,7 +140,7 @@ pointer the handle is written through. → the handle."
       (progn
         (when (eq region :viewport)
           (tp:unsupported (list :text format :viewport) terminal))
-        (format-screen terminal format))))
+        (gv:without-float-traps (format-screen terminal format)))))
 
 (defun format-screen (terminal format)
   (let ((formatter (%new-handle #'ffi:formatter-terminal-new (cffi:null-pointer) :out
