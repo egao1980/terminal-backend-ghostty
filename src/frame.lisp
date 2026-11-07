@@ -103,15 +103,31 @@
                (gv:foreign-utf8 bytes ffi:len))))
           (t (check result :graphemes-utf8) ""))))))
 
-(defun cell-width (cells)
+(defun cell-raw (cells)
+  "→ (values width hyperlink-p) from the cell's packed GhosttyCell."
   (cffi:with-foreign-object (raw 'ffi:cell)
     (check (ffi:render-state-row-cells-get cells :raw raw) :raw)
-    (case (ffi:cell-wide (cffi:mem-ref raw 'ffi:cell))
-      (:wide :wide)
-      (:spacer-tail :spacer)
-      (t :narrow))))
+    (let ((value (cffi:mem-ref raw 'ffi:cell)))
+      (values (case (ffi:cell-wide value)
+                (:wide :wide)
+                (:spacer-tail :spacer)
+                (t :narrow))
+              (ffi:cell-hyperlink value)))))
 
-(defun cell-style (cells palette)
+(defun cell-hyperlink (terminal x y)
+  "OSC 8 URI of viewport cell X, Y, or NIL."
+  (cffi:with-foreign-object (ref '(:struct ffi:grid-ref))
+    (when (eq :success (gv:terminal-grid-ref (ghostty-terminal-handle terminal)
+                                             :viewport x y ref))
+      (let ((octets (gv:call-with-output-buffer
+                     (lambda (buf len written)
+                       (ffi:grid-ref-hyperlink-uri ref buf len written))
+                     :hyperlink-uri)))
+        (when (plusp (length octets))
+          (cffi:with-pointer-to-vector-data (p octets)
+            (gv:foreign-utf8 p (length octets))))))))
+
+(defun cell-style (cells palette &optional hyperlink)
   (cffi:with-foreign-object (style '(:struct ffi:style))
     (check (ffi:render-state-row-cells-get cells :style style) :style)
     (let ((flags (cffi:foreign-slot-value style '(:struct ffi:style) 'ffi:flags)))
@@ -130,9 +146,10 @@
        :strikethrough (ffi:style-flags-strikethrough flags)
        :overline (ffi:style-flags-overline flags)
        :underline (let ((u (ffi:style-flags-underline flags)))
-                    (if (member u '(:single :double :curly :dotted :dashed)) u nil))))))
+                    (if (member u '(:single :double :curly :dotted :dashed)) u nil))
+       :hyperlink hyperlink))))
 
-(defun read-row (iterator cells cols palette y)
+(defun read-row (terminal iterator cells cols palette y)
   (let ((dirty (cffi:with-foreign-object (out 'ffi:bool)
                  (check (ffi:render-state-row-get iterator :dirty out) :row-dirty)
                  (cffi:mem-ref out 'ffi:bool)))
@@ -143,10 +160,12 @@
     (loop for x from 0 below cols
           while (ffi:render-state-row-cells-next cells)
           do (setf (aref out x)
-                   (let ((text (cell-text cells)))
-                     (tp:make-cell :text text
-                                   :width (cell-width cells)
-                                   :style (cell-style cells palette)))))
+                   (multiple-value-bind (width link-p) (cell-raw cells)
+                     (tp:make-cell :text (cell-text cells)
+                                   :width width
+                                   :style (cell-style cells palette
+                                                      (and link-p
+                                                           (cell-hyperlink terminal x y)))))))
     (loop for x from 0 below cols
           unless (aref out x) do (setf (aref out x) (tp:make-cell)))
     (make-instance 'tp:row :y y :dirty-p dirty :cells out)))
@@ -169,7 +188,7 @@
         (check (ffi:render-state-get state :row-iterator handle) :row-iterator))
       (loop for y from 0
             while (ffi:render-state-row-iterator-next iterator)
-            do (push (read-row iterator cells cols palette y) rows))
+            do (push (read-row terminal iterator cells cols palette y) rows))
       (with-slots ((c cols) (r rows) (cu cursor) (co colors)) frame
         (setf c cols
               r (coerce (nreverse rows) 'simple-vector)

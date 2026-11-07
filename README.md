@@ -20,7 +20,9 @@
 
 Features: `:scrollback :alternate-screen :kitty-keyboard :osc-52 :osc-133 :format-vt :format-html`.
 
-Not yet: OSC 8 hyperlink URIs in cells (`style-hyperlink` is NIL), selection, search, Kitty graphics.
+OSC 8 hyperlink URIs land in `style-hyperlink` (read through a viewport grid ref; needs ghostty-vt shim ABI 2).
+
+Not yet: selection, search, Kitty graphics.
 
 Native handles are freed by `terminal-close` / `frame-close`. A finalizer frees anything you forget.
 
