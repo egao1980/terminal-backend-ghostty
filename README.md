@@ -18,11 +18,13 @@
 | `encode-key` / `encode-mouse` / `encode-focus` / `encode-paste` | key / mouse encoders reconfigured from the terminal before each event, plus `focus_encode` and `paste_encode` |
 | `terminal-text :format :vt` / `:html` | `GhosttyFormatter` over the whole screen (`:region :screen`) |
 
-Features: `:scrollback :alternate-screen :kitty-keyboard :osc-52 :osc-133 :format-vt :format-html`.
+Features: `:scrollback :alternate-screen :kitty-keyboard :kitty-graphics :kitty-zlib :osc-52 :osc-133 :format-vt :format-html`.
 
 OSC 8 hyperlink URIs land in `style-hyperlink` (read through a viewport grid ref; needs ghostty-vt shim ABI 2).
 
-Not yet: selection, search, Kitty graphics.
+Kitty graphics (`:kitty-graphics`, `:kitty-zlib`): `frame-images` reads the render state's placements and `terminal-image` reads an image's pixels. PNG (`f=100`) needs a decoder; libghostty-vt asks the embedder for one, which comes with `image-protocol`.
+
+Search and selection come from `terminal-protocol`'s defaults.
 
 Native handles are freed by `terminal-close` / `frame-close`. A finalizer frees anything you forget.
 

@@ -1,5 +1,5 @@
 (defsystem "terminal-backend-ghostty"
-  :version "0.2.0"
+  :version "0.3.0"
   :description "terminal-protocol backend on libghostty-vt 1.0 (via ghostty-vt)"
   :author "egao1980"
   :license "MIT"

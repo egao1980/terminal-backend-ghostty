@@ -10,10 +10,12 @@
    (cols :initform 0 :reader %frame-cols)
    (rows :initform #() :reader %frame-rows)
    (cursor :initform nil :reader tp:frame-cursor)
-   (colors :initform nil :reader tp:frame-colors)))
+   (colors :initform nil :reader tp:frame-colors)
+   (images :initform '() :reader tp:frame-images)))
 
 (defun %free-frame (natives)
-  (destructuring-bind (&optional state iterator cells) (car natives)
+  (destructuring-bind (&optional state iterator cells images) (car natives)
+    (when images (ffi:render-state-image-iterator-free images))
     (when cells (ffi:render-state-row-cells-free cells))
     (when iterator (ffi:render-state-row-iterator-free iterator))
     (when state (ffi:render-state-free state))
@@ -23,7 +25,8 @@
   (let* ((null (cffi:null-pointer))
          (natives (list (list (%new-handle #'ffi:render-state-new null :out)
                               (%new-handle #'ffi:render-state-row-iterator-new null :out)
-                              (%new-handle #'ffi:render-state-row-cells-new null :out))))
+                              (%new-handle #'ffi:render-state-row-cells-new null :out)
+                              (%new-handle #'ffi:render-state-image-iterator-new null :out))))
          (frame (make-instance 'ghostty-frame :terminal terminal :natives natives)))
     (trivial-garbage:finalize frame (lambda () (%free-frame natives)))
     frame))
@@ -170,6 +173,35 @@
           unless (aref out x) do (setf (aref out x) (tp:make-cell)))
     (make-instance 'tp:row :y y :dirty-p dirty :cells out)))
 
+(defun image-datum (iterator key type)
+  (cffi:with-foreign-object (out type)
+    (check (ffi:render-state-image-get iterator key out) key)
+    (cffi:mem-ref out type)))
+
+(defun read-images (state iterator)
+  "The render state's image placements, in drawing order."
+  (cffi:with-foreign-object (handle :pointer)
+    (setf (cffi:mem-ref handle :pointer) iterator)
+    (let ((result (ffi:render-state-get state :image-iterator handle)))
+      (unless (eq result :success)
+        ;; Built without Kitty graphics: no images.
+        (return-from read-images '()))))
+  (loop while (ffi:render-state-image-iterator-next iterator)
+        when (eq (image-datum iterator :protocol 'ffi:image-protocol) :kitty)
+          collect (flet ((u32 (key) (image-datum iterator key :uint32))
+                         (i32 (key) (image-datum iterator key :int32)))
+                    (tp:make-image-placement
+                     :image-id (u32 :image-id)
+                     :placement-id (u32 :kitty-placement-id)
+                     :x (i32 :viewport-col) :y (i32 :viewport-row)
+                     :cols (u32 :grid-cols) :rows (u32 :grid-rows)
+                     :z (i32 :z)
+                     :layer (image-datum iterator :layer 'ffi:image-layer)
+                     :cell-offset-x (u32 :cell-offset-x) :cell-offset-y (u32 :cell-offset-y)
+                     :pixel-width (u32 :pixel-width) :pixel-height (u32 :pixel-height)
+                     :source-x (u32 :source-x) :source-y (u32 :source-y)
+                     :source-width (u32 :source-width) :source-height (u32 :source-height)))))
+
 (defmethod tp:frame-update ((frame ghostty-frame))
   (let* ((terminal (tp:frame-terminal frame))
          (state (%frame-native frame 0))
@@ -189,11 +221,12 @@
       (loop for y from 0
             while (ffi:render-state-row-iterator-next iterator)
             do (push (read-row terminal iterator cells cols palette y) rows))
-      (with-slots ((c cols) (r rows) (cu cursor) (co colors)) frame
+      (with-slots ((c cols) (r rows) (cu cursor) (co colors) (im images)) frame
         (setf c cols
               r (coerce (nreverse rows) 'simple-vector)
               cu (read-cursor state)
-              co colors)))
+              co colors
+              im (read-images state (%frame-native frame 3)))))
     (cffi:with-foreign-object (dirty 'ffi:render-state-dirty)
       (check (ffi:render-state-get state :dirty dirty) :dirty)
       (case (cffi:mem-ref dirty 'ffi:render-state-dirty)
