@@ -17,6 +17,8 @@
 
 (defmethod tp:encode-key ((terminal ghostty-terminal) key &key text modifiers
                                                             (action :press))
+  ;; x86-64 SIMD paths raise FP flags SBCL would trap.
+  (gv:without-float-traps
   (let ((encoder (native terminal 1))
         (event (native terminal 2))
         (handle (ghostty-terminal-handle terminal)))
@@ -42,7 +44,7 @@
               (lambda (buf len written) (ffi:key-encoder-encode encoder event buf len written))
               :key-encode)
         ;; The event keeps the pointer; clear it before BYTES goes away.
-        (gv:key-event-set-utf8 event (cffi:null-pointer) 0)))))
+        (gv:key-event-set-utf8 event (cffi:null-pointer) 0))))))
 
 (defparameter +buttons+
   '((:left . :left) (:middle . :middle) (:right . :right)
@@ -52,6 +54,8 @@
 
 (defmethod tp:encode-mouse ((terminal ghostty-terminal) button action x y
                             &key modifiers pixel-x pixel-y)
+  ;; x86-64 SIMD paths raise FP flags SBCL would trap.
+  (gv:without-float-traps
   (let ((encoder (native terminal 3))
         (event (native terminal 4))
         (handle (ghostty-terminal-handle terminal)))
@@ -78,17 +82,21 @@
                                      (or pixel-x (+ x 0.5)) (or pixel-y (+ y 0.5)))
         (gv:call-with-output-buffer
          (lambda (buf len written) (ffi:mouse-encoder-encode encoder event buf len written))
-         :mouse-encode)))))
+         :mouse-encode))))))
 
 (defmethod tp:encode-focus ((terminal ghostty-terminal) focused-p)
+  ;; x86-64 SIMD paths raise FP flags SBCL would trap.
+  (gv:without-float-traps
   (if (tp:terminal-mode terminal :focus-event)
       (gv:call-with-output-buffer
        (lambda (buf len written)
          (ffi:focus-encode (if focused-p :gained :lost) buf len written))
        :focus-encode)
-      (make-array 0 :element-type '(unsigned-byte 8))))
+      (make-array 0 :element-type '(unsigned-byte 8)))))
 
 (defmethod tp:encode-paste ((terminal ghostty-terminal) string)
+  ;; x86-64 SIMD paths raise FP flags SBCL would trap.
+  (gv:without-float-traps
   (let ((bracketed (tp:terminal-mode terminal :bracketed-paste)))
     (cffi:with-foreign-string ((data length) string :encoding :utf-8
                                                     :null-terminated-p nil)
@@ -97,4 +105,4 @@
        (lambda (buf len written)
          (ffi:paste-encode data length bracketed buf len written))
        :paste-encode
-       :initial-size (+ length 16)))))
+       :initial-size (+ length 16))))))
