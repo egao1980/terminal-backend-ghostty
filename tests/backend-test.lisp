@@ -197,3 +197,11 @@
     (tp:with-terminal (term)
       (tp:terminal-feed term (octets "still fine"))
       (ok (equal (tp:terminal-text term) "still fine")))))
+
+(deftest osc-8-hyperlinks
+  (with-ghostty (term :cols 10 :rows 1)
+    (tp:terminal-feed term (esc "^]8;;https://x.test/^\\ab^]8;;^\\c"))
+    (let ((row (aref (getf (tp:terminal-snapshot term) :cells) 0)))
+      (ok (equal (tp:style-hyperlink (tp:cell-style (aref row 0))) "https://x.test/"))
+      (ok (equal (tp:style-hyperlink (tp:cell-style (aref row 1))) "https://x.test/"))
+      (ng (tp:style-hyperlink (tp:cell-style (aref row 2)))))))
